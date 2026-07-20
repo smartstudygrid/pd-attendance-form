@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AIS English Department — Attendance</title>
+<title>Alrowad International School — Attendance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght=9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -45,6 +45,7 @@
     text-transform: uppercase;
     color: var(--gold-soft);
     margin-bottom: 6px;
+    font-weight: 600;
   }
 
   header h1 {
@@ -68,6 +69,14 @@
     margin-bottom: 20px;
   }
 
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
   label {
     display: block;
     font-size: 13px;
@@ -77,7 +86,7 @@
     margin-bottom: 8px;
   }
 
-  select {
+  select, input[type="date"] {
     width: 100%;
     padding: 12px 14px;
     font-size: 15px;
@@ -87,12 +96,15 @@
     background: var(--cream);
     color: var(--ink);
     appearance: none;
+  }
+
+  select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%230F2340' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 14px center;
   }
 
-  select:focus, button:focus-visible, input:focus-visible {
+  select:focus, input[type="date"]:focus, button:focus-visible, input:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
   }
@@ -199,7 +211,6 @@
     font-weight: 500;
   }
 
-  /* Style for Column C unique identification */
   .e-number {
     font-size: 11px;
     background: var(--navy);
@@ -316,16 +327,22 @@
 <body>
 
 <header>
-  <div class="eyebrow">AIS English Department</div>
-  <h1>Session Attendance</h1>
+  <div class="eyebrow">Alrowad International School</div>
+  <h1>PD Session Attendance</h1>
 </header>
 
 <main>
   <div class="card">
-    <label for="session-select">Session</label>
-    <select id="session-select">
-      <option value="">Loading sessions…</option>
-    </select>
+    <div class="form-group">
+      <label for="session-select">Session</label>
+      <select id="session-select">
+        <option value="">Loading sessions…</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="session-date">Session Date</label>
+      <input type="date" id="session-date" />
+    </div>
   </div>
 
   <div class="card" id="participants-card" style="display:none;">
@@ -364,11 +381,11 @@
 
   // ── State ──────────────────────────────────────────────────────
   let currentSession = '';
-  // attendance structure: { [name]: { name: string, eNumber: string, status: 'Present' | 'Absent' | null, manual: boolean } }
   let attendance = {}; 
   let refreshTimer = null;
 
   const sessionSelect = document.getElementById('session-select');
+  const sessionDateInput = document.getElementById('session-date');
   const participantsCard = document.getElementById('participants-card');
   const participantList = document.getElementById('participant-list');
   const participantCount = document.getElementById('participant-count');
@@ -379,6 +396,10 @@
   const manualEnum = document.getElementById('manual-enumber');
   const addManualBtn = document.getElementById('add-manual-btn');
   const manualError = document.getElementById('manual-error');
+
+  // Set default date to today
+  const today = new Date().toISOString().split('T')[0];
+  sessionDateInput.value = today;
 
   // ── Load sessions on page load ────────────────────────────────
   async function loadSessions() {
@@ -412,7 +433,6 @@
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
-      // Parse data safely whether it returns flat strings or objects with unique Column C metadata
       const incoming = json.data.map(item => {
         if (typeof item === 'object' && item !== null) {
           return {
@@ -427,12 +447,11 @@
       const incomingNames = new Set(incoming.map(p => p.name));
       const merged = {};
 
-      // 1. Keep existing state for sheets participants & add new sheets participants
       incoming.forEach(p => {
         if (attendance[p.name]) {
           merged[p.name] = {
             ...attendance[p.name],
-            eNumber: p.eNumber || attendance[p.name].eNumber // prioritize newer fetched details
+            eNumber: p.eNumber || attendance[p.name].eNumber
           };
         } else {
           merged[p.name] = {
@@ -444,7 +463,6 @@
         }
       });
 
-      // 2. Persist locally added manual additions that haven't registered on sheets yet
       Object.keys(attendance).forEach(name => {
         if (attendance[name].manual && !incomingNames.has(name)) {
           merged[name] = attendance[name];
@@ -525,7 +543,6 @@
       return;
     }
 
-    // Add manual entry to current state and set status as Present by default
     attendance[name] = {
       name,
       eNumber,
@@ -572,8 +589,8 @@
   submitBtn.addEventListener('click', async () => {
     const records = Object.values(attendance).map(p => ({
       name: p.name,
-      eNumber: p.eNumber || '', // Pass column C details on submission
-      status: p.status || 'Absent' // unmarked participants default to Absent
+      eNumber: p.eNumber || '', 
+      status: p.status || 'Absent' 
     }));
 
     if (!records.length) {
@@ -587,11 +604,15 @@
     statusMsg.className = 'status-msg';
 
     try {
-      // text/plain avoids a CORS preflight against Apps Script's Web App endpoint.
+      const selectedDate = sessionDateInput.value;
       const res = await fetch(WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ session: currentSession, records })
+        body: JSON.stringify({ 
+          session: currentSession, 
+          date: selectedDate, // Selected date is packaged with records
+          records 
+        })
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
